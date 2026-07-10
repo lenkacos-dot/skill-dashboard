@@ -1,6 +1,6 @@
 <div align="center">
 
-# 📊 Hermes Skill Dashboard — v2.0
+# 📊 Hermes Skill Dashboard — v1.0
 
 **技能可视化管理系统** — 透视所有 Skill 的健康、使用、趋势和关系
 
@@ -146,9 +146,9 @@ python3 scripts/tracker.py trends boss-mode 14
 
 ---
 
-## 🆚 v1.0 vs v2.0
+## 🆚 v0.x vs v1.0
 
-| 特性 | v1.0 | v2.0 |
+| 特性 | v0.x | v1.0 |
 |------|------|------|
 | 配置系统 | 硬编码路径 | `config.py` 统一管理 + 热更新 |
 | 扫描方式 | 全量解析每次 | 增量扫描 + mtime 缓存 |
@@ -179,8 +179,8 @@ python3 scripts/tracker.py trends boss-mode 14
 │   └── dashboard.html    ← 生成的 HTML
 └── scripts/
     ├── config.py         ← 统一配置
-    ├── tracker.py        ← 使用/错误追踪 v2.0
-    ├── analyzer.py       ← 八维分析引擎 v2.0
+    ├── tracker.py        ← 使用/错误追踪 v1.0
+    ├── analyzer.py       ← 八维分析引擎 v1.0
     ├── report.py         ← 终端报告输出
     ├── dashboard.py      ← HTML 仪表盘生成器
     └── recommender.py    ← 智能推荐引擎

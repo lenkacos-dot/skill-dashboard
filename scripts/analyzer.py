@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""skill-dashboard analyzer — 八维分析引擎 v2.0
+"""skill-dashboard analyzer — 八维分析引擎 v1.0
 
 扫描所有已安装 skill，从多维度分析并输出结构化的评估结果。
 支持增量扫描、语义触发分析、关系网络图。
@@ -809,7 +809,7 @@ def cmd_json():
 def main():
     if len(sys.argv) < 2 or sys.argv[1] in ("all", "analyze"):
         result = analyze()
-        print(f"\n📊 Skill Dashboard 分析报告 v2.0")
+        print(f"\n📊 Skill Dashboard 分析报告 v1.0")
         print(f"{'='*50}")
         print(f"📦 总计 {result['total_skills']} 个 skill")
         print(f"📈 记录使用 {result['total_uses']} 次")

@@ -1,11 +1,11 @@
 ---
 name: skill-dashboard
-description: "技能可视化管理系统 v2.0 — 分析所有已安装 skill 的使用频率、最优加载顺序、执行错误率和触发条件，以终端表格或 HTML 仪表盘输出。当用户询问 '技能管理' 'skill 排序' '哪些 skill 用得多' 'skill 报错' '技能优化' 'skill 优先级' '技能使用情况' 'dashboard' '什么 skill 该先加载' '冗余 skill' 'skill 健康' '技能推荐' 'skill 趋势' 时激活。"
-version: "2.0.0"
+description: "技能可视化管理系统 v1.0 — 分析所有已安装 skill 的使用频率、最优加载顺序、执行错误率和触发条件，以终端表格或 HTML 仪表盘输出。当用户询问 '技能管理' 'skill 排序' '哪些 skill 用得多' 'skill 报错' '技能优化' 'skill 优先级' '技能使用情况' 'dashboard' '什么 skill 该先加载' '冗余 skill' 'skill 健康' '技能推荐' 'skill 趋势' 时激活。"
+version: "1.0.0"
 tags: [skill-management, dashboard, visualization, analytics, optimization, productivity, recommender]
 ---
 
-# 📊 Skill Dashboard — 技能可视化管理系统 v2.0
+# 📊 Skill Dashboard — 技能可视化管理系统 v1.0
 
 让 agent 和用户透视化管理所有已安装 skill 的运行情况，并提供智能推荐。
 
@@ -95,9 +95,9 @@ python3 scripts/tracker.py auto-on
 │   └── dashboard.html    ← 生成的 HTML 仪表盘
 └── scripts/
     ├── config.py         ← 统一配置系统（路径、权重、常量）
-    ├── tracker.py        ← 使用/错误追踪核心 v2.0（CLI）
+    ├── tracker.py        ← 使用/错误追踪核心 v1.0（CLI）
     │                      · 自动追踪钩子、错误分类、数据归档
-    ├── analyzer.py       ← 八维分析引擎 v2.0
+    ├── analyzer.py       ← 八维分析引擎 v1.0
     │                      · 增量扫描、语义分析、六级评分、关系网络
     ├── report.py         ← 终端报告输出（agent 直接调用的入口）
     │                      · 趋势分析、对比报告、技能推荐
@@ -173,7 +173,7 @@ python3 scripts/tracker.py auto-on
 | `recommender.py missing` | 检测可能缺失的 skill 类型 |
 | `recommender.py hot` | 热门趋势推荐 |
 
-## 设计亮点（v2.0 新增）
+## 设计亮点（v1.0 新增）
 
 1. **统一配置系统** — `config.py` 集中管理路径、权重、阈值，支持 `settings.json` 持久化覆盖
 2. **增量扫描** — 通过 mtime 缓存避免重复解析未变更 skill，大幅提升性能

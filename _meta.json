@@ -1,7 +1,7 @@
 {
   "name": "skill-dashboard",
-  "version": "2.0.0",
-  "display_name": "📊 Skill Dashboard — 技能可视化管理系统 v2.0",
+  "version": "1.0.0",
+  "display_name": "📊 Skill Dashboard — 技能可视化管理系统 v1.0",
   "description": "可视化技能管理系统 — 分析所有已安装 skill 的使用频率、最优加载顺序、执行错误率和触发条件，生成终端报告或 HTML 仪表盘。支持智能推荐、趋势分析、错误分类和技能关系网络。当用户询问'技能管理''skill 排序''哪些 skill 用得多''skill 报错''技能优化''dashboard''技能推荐''技能趋势'时激活。",
   "author": "zhenqingsu",
   "homepage": "",
@@ -71,8 +71,8 @@
   },
   "files": {
     "scripts/config.py": "统一配置系统 — 路径、权重、阈值、热更新",
-    "scripts/tracker.py": "使用/错误追踪核心 v2.0 — SQLite 数据库、自动分类、数据归档、趋势分析",
-    "scripts/analyzer.py": "八维分析引擎 v2.0 — 增量扫描、语义触发、六级评分、关系网络",
+    "scripts/tracker.py": "使用/错误追踪核心 v1.0 — SQLite 数据库、自动分类、数据归档、趋势分析",
+    "scripts/analyzer.py": "八维分析引擎 v1.0 — 增量扫描、语义触发、六级评分、关系网络",
     "scripts/report.py": "终端报告输出 — 格式化表格、趋势、对比、推荐",
     "scripts/dashboard.py": "HTML 仪表盘生成器 — Chart.js 图表、交互式过滤、关系网络可视化",
     "scripts/recommender.py": "智能技能推荐引擎 — 协同过滤、内容推荐、场景匹配、缺失检测",

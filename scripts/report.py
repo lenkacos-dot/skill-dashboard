@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""skill-dashboard report — 终端报表生成器 v2.0
+"""skill-dashboard report — 终端报表生成器 v1.0
 
 读取分析结果，以终端表格/JSON 形式呈现。
 新增子命令: trends, compare, recommend

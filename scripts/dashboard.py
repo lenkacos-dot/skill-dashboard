@@ -26,7 +26,7 @@ HTML_HEAD = """<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Skill Dashboard v2.0</title>
+<title>Skill Dashboard v1.0</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}
@@ -62,7 +62,7 @@ h1{{font-size:24px;margin-bottom:6px;color:#38bdf8}}
 </style>
 </head>
 <body>
-<h1>📊 Skill Dashboard <span style="font-size:14px;color:#94a3b8">v2.0</span></h1>
+<h1>📊 Skill Dashboard <span style="font-size:14px;color:#94a3b8">v1.0</span></h1>
 <div class="subtitle" id="subtitle">Loading...</div>
 <div class="summary-row" id="summary-stats"></div>
 <div class="grid">

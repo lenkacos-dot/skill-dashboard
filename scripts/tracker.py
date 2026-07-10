@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""skill-dashboard tracker — 使用/错误追踪核心 v2.0
+"""skill-dashboard tracker — 使用/错误追踪核心 v1.0
 
 记录每次 skill 的调用和错误到 SQLite 数据库。
 纯 stdlib，无外部依赖。
