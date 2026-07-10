@@ -1,0 +1,10 @@
+data/tracker.db
+data/tracker.db-shm
+data/tracker.db-wal
+data/dashboard.html
+data/latest-analysis.json
+data/scan-cache.json
+data/settings.json
+__pycache__/
+*.pyc
+.DS_Store
