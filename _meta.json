@@ -1,0 +1,82 @@
+{
+  "name": "skill-dashboard",
+  "version": "2.0.0",
+  "display_name": "📊 Skill Dashboard — 技能可视化管理系统 v2.0",
+  "description": "可视化技能管理系统 — 分析所有已安装 skill 的使用频率、最优加载顺序、执行错误率和触发条件，生成终端报告或 HTML 仪表盘。支持智能推荐、趋势分析、错误分类和技能关系网络。当用户询问'技能管理''skill 排序''哪些 skill 用得多''skill 报错''技能优化''dashboard''技能推荐''技能趋势'时激活。",
+  "author": "zhenqingsu",
+  "homepage": "",
+  "triggers": {
+    "on_skill_management_request": {
+      "description": "用户提及技能管理、排序、使用统计、错误排查、清理、优化等关键词",
+      "action": "运行 report.py <子命令> 或 dashboard.py 生成可视化报告"
+    },
+    "on_dashboard_request": {
+      "description": "用户直接说 dashboard、开个仪表盘、看看技能情况、可视化",
+      "action": "运行 dashboard.py --open 生成完整 HTML 仪表盘并用浏览器打开"
+    },
+    "on_error_report": {
+      "description": "用户反馈某个 skill 运行出错或想查看错误统计",
+      "action": "运行 tracker.py errors 查看错误列表，运行 report.py errors 查看分类错误报告"
+    },
+    "on_trend_request": {
+      "description": "用户询问使用趋势、最近情况、变化、对比",
+      "action": "运行 report.py trends [days] 或 report.py compare [days]"
+    },
+    "on_recommendation_request": {
+      "description": "用户询问推荐 skill、还有什么可用、类似功能",
+      "action": "运行 report.py recommend 或 recommender.py scene <query>"
+    }
+  },
+  "call_chain": {
+    "step_1": "config.py — 统一配置管理（路径、权重、阈值）",
+    "step_2": "tracker.py — 记录每次 skill 使用和错误，维护 SQLite 数据库，支持自动追踪和数据归档",
+    "step_3": "analyzer.py — 从多维度分析所有 skill：增量扫描、使用频率、语义触发、体积代价、依赖关系、冗余检测、健康评分、最优顺序、关系网络",
+    "step_4": "report.py — 读取分析结果，输出格式化终端表格（支持趋势、对比、推荐）",
+    "step_5": "dashboard.py — 读取分析结果，生成包含 Chart.js 图表、排名、关系网络的完整 HTML 可视化仪表盘",
+    "step_6": "recommender.py — 基于协同过滤、内容相似度和场景匹配智能推荐 skill"
+  },
+  "dependencies": {
+    "python_version": ">=3.9",
+    "external_packages": [],
+    "required_files": [
+      "scripts/config.py",
+      "scripts/tracker.py",
+      "scripts/analyzer.py",
+      "scripts/report.py",
+      "scripts/dashboard.py",
+      "scripts/recommender.py"
+    ]
+  },
+  "config": {
+    "auto_track": {
+      "description": "是否自动记录 skill 使用（通过 tracker.py auto-on 启用）",
+      "default": true
+    },
+    "dashboard_port": {
+      "description": "本地预览端口（用于 dashboard.py --port）",
+      "default": 8080
+    },
+    "cache_ttl": {
+      "description": "分析缓存有效期（秒）",
+      "default": 900
+    },
+    "weights": {
+      "description": "分析权重配置（可通过 data/settings.json 覆盖）",
+      "default": {
+        "benefit": {"usage_score": 0.30, "error_score": 0.20, "dependency_score": 0.15, "trigger_specificity": 0.15, "completeness": 0.10, "recency": 0.10},
+        "cost": {"skimmd_lines": 0.45, "description_length": 0.25, "complexity": 0.20, "file_count": 0.10},
+        "health": {"usage_count": 0.25, "usage_recency": 0.15, "error_rate_neg": 0.20, "completeness": 0.10, "dependency_score": 0.10, "trigger_clarity": 0.10, "volume_efficiency": 0.05, "version_freshness": 0.05}
+      }
+    }
+  },
+  "files": {
+    "scripts/config.py": "统一配置系统 — 路径、权重、阈值、热更新",
+    "scripts/tracker.py": "使用/错误追踪核心 v2.0 — SQLite 数据库、自动分类、数据归档、趋势分析",
+    "scripts/analyzer.py": "八维分析引擎 v2.0 — 增量扫描、语义触发、六级评分、关系网络",
+    "scripts/report.py": "终端报告输出 — 格式化表格、趋势、对比、推荐",
+    "scripts/dashboard.py": "HTML 仪表盘生成器 — Chart.js 图表、交互式过滤、关系网络可视化",
+    "scripts/recommender.py": "智能技能推荐引擎 — 协同过滤、内容推荐、场景匹配、缺失检测",
+    "data/": "运行时数据目录（SQLite 数据库、HTML 输出、分析缓存、用户配置）"
+  },
+  "tags": ["skill-management", "dashboard", "visualization", "analytics", "optimization", "productivity", "recommender", "monitoring"]
+}
