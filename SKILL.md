@@ -15,9 +15,12 @@ tags: [skill-management, dashboard, visualization, analytics, optimization, prod
 
 | 关键词 / 场景 | 激活命令 |
 |---|---|
-| "什么skill用得多/用得少" / "使用频率" / "skill usage" | `report.py usage` |
-| "哪个skill该优先加载" / "skill顺序" / "加载顺序" / "最优顺序" | `report.py order` |
-| "skill报错" / "什么skill出错了" / "错误" | `report.py errors` |
+|| "什么skill用得多/用得少" / "使用频率" / "skill usage" | `report.py usage` |
+|| "哪个skill该优先加载" / "skill顺序" / "加载顺序" / "最优顺序" | `report.py order` |
+|| "优化建议" / "skill优化" / "有什么该精简" / "建议清理" | `report.py suggest` |
+|| "磁盘占用" / "大小" / "空间" / "占用多少" / "谁最占空间" | `report.py cost` |
+|| "性价比" / "冷启动" / "冷启动状态" / "哪个skill性价比高" | `report.py cost` |
+|| "skill报错" / "什么skill出错了" / "错误" | `report.py errors` |
 | "skill健康" / "健康分" / "哪些skill需要关注" | `report.py health` |
 | "什么场景触发什么skill" / "触发条件" / "trigger" | `report.py triggers` |
 | "skill有没有重复" / "冗余skill" / "重叠" / "冲突" | `report.py conflicts` |
@@ -97,8 +100,8 @@ python3 scripts/tracker.py auto-on
     ├── config.py         ← 统一配置系统（路径、权重、常量）
     ├── tracker.py        ← 使用/错误追踪核心 v1.0（CLI）
     │                      · 自动追踪钩子、错误分类、数据归档
-    ├── analyzer.py       ← 八维分析引擎 v1.0
-    │                      · 增量扫描、语义分析、六级评分、关系网络
+    ├── analyzer.py       ← 八维分析引擎 v1.1
+    │                      · 增量扫描、语义分析、六级评分、关系网络、磁盘统计、自动建议
     ├── report.py         ← 终端报告输出（agent 直接调用的入口）
     │                      · 趋势分析、对比报告、技能推荐
     ├── dashboard.py      ← HTML 仪表盘生成器（交互式图表）
@@ -115,7 +118,9 @@ python3 scripts/tracker.py auto-on
 |---|---|---|
 | `report.py` (无参) | 完整报告：简要+使用+顺序+健康+触发+错误+冗余+推荐 | 用户问总览 |
 | `report.py usage` | 使用频率排行（带进度条和错误标记） | 用户问"哪个用得多" |
-| `report.py order` | 最优加载顺序（收益/成本比降序，含等级） | 用户问"哪个该先加载" |
+|| `report.py order` | 最优加载顺序（收益/成本比降序，含性价比/磁盘/冷启动） | 用户问"哪个该先加载" |
+|| `report.py suggest` | 自动优化建议（按严重度排序，含闲置/臃肿/报错/重叠） | 用户问"优化建议/有什么该精简" |
+|| `report.py cost` | 磁盘占用 & 性价比分析（含文件数/效率/冷启动状态） | 用户问"磁盘占用/性价比/冷启动" |
 | `report.py health` | 健康评分排名 + S/A/B/C/D/F 等级 + 状态标记 | 用户问"健康/状态" |
 | `report.py triggers` | 触发场景矩阵（含触发类型识别） | 用户问"什么场景触发" |
 | `report.py errors` | 错误记录详情（含自动分类和严重度） | 用户问"报错/错误" |
@@ -188,3 +193,10 @@ python3 scripts/tracker.py auto-on
 11. **Session 集成** — 自动从 Trae/Hermes session DB 挖掘历史使用记录
 12. **自动追踪钩子** — 通过 `.auto_track` 文件供其他 skill 检测并自动上报
 13. **纯 stdlib** — 零外部依赖，Python 3.9+ 兼容
+
+## 设计亮点（v1.1 新增）
+
+1. **💰 性价比分析** — `cost_efficiency = 健康分 / 磁盘字节数 * 1000`，结合使用频率和磁盘占用，量化每个 skill 的「投入产出比」
+2. **⏰ 冷启动标识** — 根据最后使用时间分 5 级：🔥近期(7d内) / 🌡️7~30天 / 🥶30~90天 / 🧊90天+ / ❄️从未使用，一眼识别「吃灰」skill
+3. **🔧 自动优化建议** — `report.py suggest` 智能分析 6 类问题：大且浪费(>1MB+使用≤5)、高报错率(>50%)、长期闲置(>30天未用)、低效臃肿(健康D/F+磁盘大)、功能重叠(基于冲突检测)、依赖引用不足
+4. **📦 磁盘占用统计** — 扫描每个 skill 目录的实际磁盘占用，支持 KB/MB 自动格式化，在 `order` 和 `cost` 命令中展示

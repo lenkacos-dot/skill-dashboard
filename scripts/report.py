@@ -23,9 +23,9 @@ import json
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
 
-from config import DATA_DIR, DB_PATH, CACHE_PATH, SCRIPTS_DIR
+from config import CACHE_PATH, SCRIPTS_DIR, DATA_DIR
+from analyzer import calculate_benefit_cost
 
 # ── 颜色工具 ──
 def _c(code, text):
@@ -105,7 +105,7 @@ def cmd_brief():
 
 
 def cmd_usage(args):
-    """使用频率排名"""
+    """使用频率排名（含主动/被动）"""
     data = load_analysis()
     days = int(args[0]) if args and args[0].isdigit() else None
     order = data.get("optimal_order", [])
@@ -119,31 +119,54 @@ def cmd_usage(args):
         print("暂无使用记录。\n")
         return
 
-    print(f"  {'#':<3} {'Skill':<25} {'使用次数':<8} {'健康分':<8} {'等级':<4}")
-    print(f"  {'-'*52}")
+    us = data.get("usage_stats", {})
+    print(f"  {'#':<3} {'Skill':<25} {'总次数':<6} {'🤖主动':<6} {'👤被动':<6} {'健康分':<7} {'等级':<4}")
+    print(f"  {'-'*62}")
     for i, s in enumerate(order[:30], 1):
         grade = get_grade(s["health"])
         icon = get_grade_icon(grade)
-        print(f"  {i:<3} {CYAN(s['name']):<25} {s['usage_count']:<8} {s['health']:<8.1f} {icon} {grade}")
+        name = s["name"]
+        active = us.get("active_counts", {}).get(name, 0)
+        passive = us.get("passive_counts", {}).get(name, 0)
+        print(f"  {i:<3} {CYAN(name):<25} {s['usage_count']:<6} {active:<6} {passive:<6} {s['health']:<7.1f} {icon} {grade}")
     print()
 
 
 def cmd_order():
-    """最优加载顺序"""
+    """最优加载顺序（收益/成本/触发/磁盘/冷启动）"""
     data = load_analysis()
     order = data.get("optimal_order", [])
 
-    print("\n=== ⚡ 最优 Skill 加载顺序（收益/成本比降序）===\n")
+    print("\n=== ⚡ 最优 Skill 加载顺序（按收益/成本比降序）===\n")
     if not order:
         print("暂无数据。\n")
         return
 
-    print(f"  {'#':<3} {'Skill':<25} {'收益':<8} {'成本':<8} {'比值':<8} {'健康':<6} {'触发':<6} {'行数':<6}")
-    print(f"  {'-'*73}")
+    # 表头
+    hdr = f"  {'#':<3} {'Skill':<22} {'收益':<6} {'成本':<6} {'比值':<7} {'健康':<6} {'性价比':<7} {'磁盘':<9} {'触发':<4} {'使用':<4} {'行数':<5} {'状态':<16}"
+    sep = "  " + "-" * (len(hdr) - 2)
+    print(hdr)
+    print(sep)
+
     for i, s in enumerate(order[:40], 1):
-        grade = get_grade(s["health"])
-        print(f"  {i:<3} {CYAN(s['name']):<25} {s['benefit']:<8.3f} {s['cost']:<8.3f} {s['ratio']:<8.3f} {s['health']:<6.1f} ({grade}) {s['trigger_count']:<6} {s.get('lines', 0):<6}")
+        # 等级图标（收益/成本/比值/健康/性价比/磁盘/触发/使用/行数/冷启动）
+        print(f"  {i:<3} {CYAN(s['name']):<22} "
+              f"{s['benefit']:<6.2f} {s['cost']:<6.2f} {s['ratio']:<7.1f} "
+              f"{s['health']:<6.1f} {s['cost_efficiency']:<7.2f} {s['disk_size']:<9} "
+              f"{s['trigger_count']:<4} {s['usage_count']:<4} {s['lines']:<5} "
+              f"{s['cold_start']}")
     print(f"\n  ... 共 {len(order)} 个 skill\n")
+
+    # 汇总统计
+    active = [s for s in order if "🔥" in s["cold_start"]]
+    warm = [s for s in order if "🌡️" in s["cold_start"]]
+    cold = [s for s in order if "🥶" in s["cold_start"]]
+    frozen = [s for s in order if "🧊" in s["cold_start"]]
+    never = [s for s in order if "❄️" in s["cold_start"]]
+    print(f"  {'📊 冷启动分布':<20} {'🔥 近期在用':<16} {'🌡️ 7~30天':<16} {'🥶 30~90天':<16} {'🧊 90天+':<16} {'❄️ 从未使用':<16}")
+    print(f"  {'':<20} {len(active):<16} {len(warm):<16} {len(cold):<16} {len(frozen):<16} {len(never):<16}")
+    print(f"  {'📈 累计使用':<20} {sum(s['usage_count'] for s in order):<10}次")
+    print(f"  {'💾 总磁盘占用':<20} {sum(s['disk_bytes'] for s in order)/1024/1024:.1f}MB\n")
 
 
 def cmd_health():
@@ -248,6 +271,56 @@ def cmd_conflicts():
             print(f"    {CYAN(p['skill_a'])} ↔ {CYAN(p['skill_b'])}  ({YELLOW(overlap_pct)})")
             print(f"      共同: {', '.join(p['common_keywords'][:6])}")
     print()
+
+
+def cmd_suggest():
+    """自动优化建议"""
+    data = load_analysis()
+    suggestions = data.get("suggestions", [])
+
+    print(f"\n=== 🔧 自动优化建议（共 {len(suggestions)} 条）===\n")
+    if not suggestions:
+        print("  ✅ 未检测到需要优化的指标\n")
+        return
+
+    severity_icons = {"high": "🔴", "medium": "🟡", "low": "🟢", "info": "ℹ️"}
+    for s in suggestions:
+        icon = severity_icons.get(s["severity"], "⚪")
+        print(f"  {icon} [{s['severity'].upper()}] {CYAN(s['skill'])}")
+        print(f"     {s['message']}")
+
+    high = sum(1 for s in suggestions if s["severity"] == "high")
+    med = sum(1 for s in suggestions if s["severity"] == "medium")
+    low = sum(1 for s in suggestions if s["severity"] == "low")
+    print(f"\n  严重: {RED(str(high))}  中等: {YELLOW(str(med))}  低: {GREEN(str(low))}  信息: {len(suggestions) - high - med - low}")
+    print()
+
+
+def cmd_cost():
+    """磁盘占用 + 性价比分析"""
+    data = load_analysis()
+    order = data.get("optimal_order", [])
+
+    print("\n=== 💰 磁盘占用 & 性价比分析 ===\n")
+    if not order:
+        print("暂无数据。\n")
+        return
+
+    print(f"  {'#':<3} {'Skill':<22} {'磁盘':<9} {'文件':<6} {'效率':<7} {'成本':<7} {'健康':<6} {'使用':<4}")
+    print(f"  {'-'*68}")
+    for i, s in enumerate(order[:40], 1):
+        grade_icon = get_grade_icon(get_grade(s["health"]))
+        print(f"  {i:<3} {CYAN(s['name']):<22} {s['disk_size']:<9} {s.get('lines',0):<6} {s['cost_efficiency']:<7} {s['cost']:<7.2f} {s['health']:<6.1f} {s['usage_count']:<4}")
+
+    total_bytes = sum(s.get("disk_bytes", 0) for s in order)
+    total_files = sum(s.get("lines", 0) for s in order)
+    if total_bytes >= 1048576:
+        total_str = f"{total_bytes/1048576:.1f}MB"
+    elif total_bytes >= 1024:
+        total_str = f"{total_bytes/1024:.0f}KB"
+    else:
+        total_str = f"{total_bytes}B"
+    print(f"\n  📊 合计: {total_str} / {total_files} 个文件 / {len(order)} 个 skill\n")
 
 
 def cmd_trends():
@@ -431,6 +504,8 @@ def cmd_all():
     cmd_conflicts()
     cmd_trends()
     cmd_recommend()
+    cmd_suggest()
+    cmd_cost()
 
     print(f"\n{'='*55}")
     print(f"  报告完毕")
@@ -456,6 +531,8 @@ def main():
         "trends": cmd_trends,
         "compare": lambda: cmd_compare(args),
         "recommend": cmd_recommend,
+        "suggest": cmd_suggest,
+        "cost": cmd_cost,
         "json": cmd_json,
         "all": cmd_all,
     }
@@ -464,7 +541,7 @@ def main():
         commands[cmd]()
     else:
         print(f"❌ 未知命令: {cmd}")
-        print("可用命令: brief, usage, order, health, triggers, errors, conflicts, trends, compare, recommend, json, all")
+        print("可用命令: brief, usage, order, health, triggers, errors, conflicts, trends, compare, recommend, suggest, cost, json, all")
         sys.exit(1)
 
 

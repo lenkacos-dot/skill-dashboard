@@ -127,6 +127,11 @@ def scan_skills():
             skill_info = scan_cache[cache_key]
             skill_info["name"] = skill_name
             skill_info["_cached"] = True
+            # 缓存回填: 新增字段在老缓存中可能缺失
+            if "disk_bytes" not in skill_info:
+                skill_info["disk_bytes"] = calc_dir_size(d)
+            if "total_files" not in skill_info:
+                skill_info["total_files"] = count_files(d)
             skills.append(skill_info)
             continue
 
@@ -139,6 +144,7 @@ def scan_skills():
             skill_info["meta"] = meta
 
         skill_info["total_files"] = count_files(d)
+        skill_info["disk_bytes"] = calc_dir_size(d)
         skill_info["skimmd_lines"] = count_skimmd_lines(d)
         skill_info["script_count"] = len(list(d.glob("scripts/*.py")))
         skill_info["_cached"] = False
@@ -268,6 +274,18 @@ def count_files(skill_dir):
     return len([f for f in skill_dir.rglob("*") if f.is_file()])
 
 
+def calc_dir_size(skill_dir):
+    """计算 skill 目录总字节数"""
+    total = 0
+    for f in skill_dir.rglob("*"):
+        if f.is_file():
+            try:
+                total += f.stat().st_size
+            except OSError:
+                pass
+    return total
+
+
 def count_skimmd_lines(skill_dir):
     md_file = skill_dir / "SKILL.md"
     if not md_file.exists():
@@ -289,59 +307,14 @@ def count_skimmd_lines(skill_dir):
 
 # ── 语义触发分析 ──
 
-def analyze_triggers(skill):
-    """语义触发条件分析
-
-    识别 4 类触发条件:
-    - user_intent: 用户意图触发（如"我想..."）
-    - keyword: 关键词触发（精确匹配）
-    - scene: 场景触发（如"当...时"）
-    - tool_call: 工具调用触发（如 skill_view）
-    """
-    result = {
-        "type": "keyword",
-        "keywords": [],
-        "specificity": 0.0,
-    }
-
-    desc = skill.get("description", "")
-    triggers = skill.get("triggers", [])
-    meta = skill.get("meta", {})
-
-    all_text = desc + " " + " ".join(triggers) + " " + " ".join(meta.get("parsed_triggers", []))
-
-    # 尝试分类
-    intent_patterns = re.findall(r'(想|要|需要|打算|want|need|would like)', all_text, re.IGNORECASE)
-    scene_patterns = re.findall(r'(当.*时|when.*|if.*then|在.*场景)', all_text, re.IGNORECASE)
-    tool_patterns = re.findall(r'(skill_view|调用|call|invoke|tool)', all_text, re.IGNORECASE)
-
-    if intent_patterns:
-        result["type"] = "user_intent"
-    elif scene_patterns:
-        result["type"] = "scene"
-    elif tool_patterns:
-        result["type"] = "tool_call"
-
-    # 提取关键词
-    words = re.findall(r'\b[a-zA-Z\u4e00-\u9fff]{2,}\b', all_text)
-    stopwords = {"skill", "user", "when", "this", "that", "with", "from", "using",
-                 "tool", "the", "and", "for", "are", "you", "can", "use", "used"}
-    keywords = [w for w in words if w.lower() not in stopwords and len(w) >= 2]
-    result["keywords"] = list(dict.fromkeys(keywords))[:20]
-
-    # 明确度（关键词数量 + 触发条件数量）
-    specificity = min(len(keywords) / 15 + len(triggers) / 3, 1.0)
-    result["specificity"] = round(specificity, 3)
-
-    return result
-
-
 # ── 统计 ──
 
 def get_usage_stats(conn):
     """从 tracker DB 获取使用统计（含时间衰减）"""
     stats = {
         "usage_counts": defaultdict(int),
+        "active_counts": defaultdict(int),
+        "passive_counts": defaultdict(int),
         "recent_usage": defaultdict(int),
         "first_seen": {},
         "last_seen": {},
@@ -372,6 +345,22 @@ def get_usage_stats(conn):
             stats["first_seen"][name] = r["first_ts"]
             stats["last_seen"][name] = r["last_ts"]
             stats["total_uses"] += r["cnt"]
+
+        # 主动/被动统计
+        try:
+            mode_rows = conn.execute("""
+                SELECT skill_name, mode, COUNT(*) as cnt
+                FROM usage_log
+                GROUP BY skill_name, mode
+            """).fetchall()
+            for r in mode_rows:
+                name = r["skill_name"]
+                if r["mode"] == "active":
+                    stats["active_counts"][name] = r["cnt"]
+                else:
+                    stats["passive_counts"][name] = r["cnt"]
+        except sqlite3.OperationalError:
+            pass
 
         # 近 7 天（权重 1.5x）
         recent7 = conn.execute("""
@@ -594,14 +583,43 @@ def detect_redundancy(skills):
 
 def compute_optimal_order(skills, usage_stats):
     """计算最优 skill 加载顺序（按收益/成本比降序）"""
+    now = time.time()
     results = []
     for s in skills:
         if s["name"] == "skill-dashboard":
             continue
         bc = calculate_benefit_cost(s, usage_stats)
         health = calculate_health(s, bc, usage_stats)
+        name = s["name"]
+        usage_count = usage_stats["usage_counts"].get(name, 0)
+        last_ts = usage_stats["last_seen"].get(name, 0)
+
+        # 冷启动状态
+        if usage_count == 0 or last_ts == 0:
+            cold_start = "❄️ 从未使用"
+        elif (now - last_ts) > 90 * 86400:
+            cold_start = "🧊 90天+未用"
+        elif (now - last_ts) > 30 * 86400:
+            cold_start = "🥶 30~90天未用"
+        elif (now - last_ts) > 7 * 86400:
+            cold_start = "🌡️ 7~30天未用"
+        else:
+            cold_start = "🔥 近期在用"
+
+        # 成本效率 = 健康分 / 成本
+        cost_eff = round(health / max(bc["cost"], 0.1), 2)
+
+        # 磁盘大小（人类可读）
+        disk_b = s.get("disk_bytes", 0)
+        if disk_b >= 1048576:
+            disk_str = f"{disk_b/1048576:.1f}MB"
+        elif disk_b >= 1024:
+            disk_str = f"{disk_b/1024:.0f}KB"
+        else:
+            disk_str = f"{disk_b}B"
+
         results.append({
-            "name": s["name"],
+            "name": name,
             "benefit": bc["benefit"],
             "cost": bc["cost"],
             "ratio": bc["ratio"],
@@ -609,8 +627,13 @@ def compute_optimal_order(skills, usage_stats):
             "description": s.get("description", "")[:80],
             "trigger_count": len(s.get("triggers", [])),
             "lines": s.get("skimmd_lines", 0),
-            "usage_count": usage_stats["usage_counts"].get(s["name"], 0),
-            "error_count": usage_stats["error_counts"].get(s["name"], 0),
+            "usage_count": usage_count,
+            "error_count": usage_stats["error_counts"].get(name, 0),
+            "last_seen_ts": last_ts,
+            "cold_start": cold_start,
+            "cost_efficiency": cost_eff,
+            "disk_bytes": disk_b,
+            "disk_size": disk_str,
         })
     results.sort(key=lambda x: (-x["ratio"], -x["usage_count"], -x["health"]))
     return results
@@ -664,6 +687,86 @@ def build_network(skills, usage_stats):
     return unique_edges
 
 
+# ── 自动优化建议 ──
+
+def generate_suggestions(skills, usage_stats, order, conflicts, network):
+    """根据分析数据生成自动优化建议"""
+    suggestions = []
+    now = time.time()
+
+    for s in order:
+        name = s["name"]
+        usage_count = s["usage_count"]
+        error_count = s["error_count"]
+        last_ts = s["last_seen_ts"]
+        health = s["health"]
+        disk_b = s["disk_bytes"]
+        cost_eff = s["cost_efficiency"]
+
+        # 1. 大且没用 → 浪费上下文
+        if usage_count == 0 and disk_b > 512000:  # >500KB
+            suggestions.append({
+                "type": "overhead",
+                "skill": name,
+                "severity": "high",
+                "message": f"磁盘占用 {s['disk_size']} 但从未使用，建议考虑移除或精简",
+            })
+
+        # 2. 高报错率
+        total_uses = max(usage_count, 1)
+        if error_count > 0 and (error_count / total_uses) > 0.3:
+            suggestions.append({
+                "type": "error_prone",
+                "skill": name,
+                "severity": "high",
+                "message": f"报错率 {(error_count/total_uses)*100:.0f}%，建议检查依赖或修复 bug",
+            })
+
+        # 3. 很久没用
+        if usage_count > 0 and last_ts > 0 and (now - last_ts) > 60 * 86400:
+            suggestions.append({
+                "type": "dormant",
+                "skill": name,
+                "severity": "medium",
+                "message": f"超过 60 天未使用，建议评估是否仍需要",
+            })
+
+        # 4. 低性价比（高成本低收益）
+        if cost_eff < 5 and usage_count > 0:
+            suggestions.append({
+                "type": "low_efficiency",
+                "skill": name,
+                "severity": "medium",
+                "message": f"成本效率 {cost_eff}（健康分 {health}/成本 {s['cost']}），偏臃肿",
+            })
+
+    # 5. 功能重叠
+    for c in conflicts:
+        if c["type"] == "overlapping_keywords":
+            suggestions.append({
+                "type": "overlap",
+                "skill": f"{c['skill_a']} ↔ {c['skill_b']}",
+                "severity": "low",
+                "message": f"功能重叠 {c['overlap_score']:.0%}，共同关键词: {', '.join(c['common_keywords'][:4])}",
+            })
+
+    # 6. 关系网络
+    for e in network:
+        if e["type"] == "dependency":
+            suggestions.append({
+                "type": "relationship",
+                "skill": f"{e['source']} → {e['target']}",
+                "severity": "info",
+                "message": f"存在依赖引用关系",
+            })
+
+    # 按严重程度排序
+    severity_order = {"high": 0, "medium": 1, "low": 2, "info": 3}
+    suggestions.sort(key=lambda x: (severity_order.get(x["severity"], 99), x["skill"]))
+
+    return suggestions
+
+
 # ── 主分析 ──
 
 def analyze():
@@ -697,6 +800,9 @@ def analyze():
     # 关系网络
     network = build_network(skills, usage_stats)
 
+    # 自动优化建议
+    suggestions = generate_suggestions(skills, usage_stats, order, conflicts, network)
+
     # 统计概览
     total_skills = len(skills)
     total_uses = usage_stats["total_uses"]
@@ -722,9 +828,12 @@ def analyze():
         "health_ranking": health_results,
         "redundancies": conflicts,
         "network": network,
+        "suggestions": suggestions,
         "skills_detail": skills,
         "usage_stats": {
             "usage_counts": dict(usage_stats["usage_counts"]),
+            "active_counts": dict(usage_stats["active_counts"]),
+            "passive_counts": dict(usage_stats["passive_counts"]),
             "recent_counts": dict(usage_stats["recent_usage"]),
             "error_counts": dict(usage_stats["error_counts"]),
             "error_details": {k: v for k, v in usage_stats["error_messages"].items()},

@@ -5,7 +5,7 @@
 纯 stdlib，无外部依赖。
 
 用法:
-  python3 tracker.py log <skill>                           # 记录一次使用
+  python3 tracker.py log <skill> [--mode=active|passive]         # 记录一次使用（默认被动）
   python3 tracker.py error <skill> <msg> [--severity=X]    # 记录一次错误
   python3 tracker.py stats [days]                          # 显示统计（可选最近 N 天）
   python3 tracker.py errors                                # 显示错误列表
@@ -46,7 +46,8 @@ def init_db():
             skill_name TEXT NOT NULL,
             timestamp REAL NOT NULL,
             session_id TEXT,
-            source TEXT DEFAULT 'manual'
+            source TEXT DEFAULT 'manual',
+            mode TEXT DEFAULT 'passive'
         );
         CREATE TABLE IF NOT EXISTS error_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +63,11 @@ def init_db():
         CREATE INDEX IF NOT EXISTS idx_error_skill ON error_log(skill_name);
         CREATE INDEX IF NOT EXISTS idx_error_ts ON error_log(timestamp);
     """)
+    # 兼容旧表：添加 mode 列（如果不存在）
+    try:
+        conn.execute("ALTER TABLE usage_log ADD COLUMN mode TEXT DEFAULT 'passive'")
+    except sqlite3.OperationalError:
+        pass  # 列已存在
     conn.commit()
     conn.close()
 
@@ -87,25 +93,37 @@ def classify_error(msg):
 
 
 def cmd_log(args):
-    """记录一次 skill 使用"""
+    """记录一次 skill 使用（支持 --mode=active|passive）"""
     if not args:
-        print("❌ 用法: tracker.py log <skill_name>")
+        print("❌ 用法: tracker.py log <skill_name> [--mode=active|passive]")
         sys.exit(1)
+
     skill = args[0]
+    mode = "passive"
+    filtered = []
+    for a in args[1:]:
+        if a.startswith("--mode="):
+            val = a.split("=", 1)[1]
+            if val in ("active", "passive"):
+                mode = val
+        else:
+            filtered.append(a)
+
     conn = get_db()
     if skill in ("skill-dashboard",):
         print("⏭️  跳过自追踪")
         return
     conn.execute(
-        "INSERT INTO usage_log (skill_name, timestamp) VALUES (?, ?)",
-        (skill, time.time())
+        "INSERT INTO usage_log (skill_name, timestamp, mode) VALUES (?, ?, ?)",
+        (skill, time.time(), mode)
     )
     conn.commit()
     count = conn.execute(
         "SELECT COUNT(*) FROM usage_log WHERE skill_name = ?", (skill,)
     ).fetchone()[0]
     conn.close()
-    print(f"✅ 记录使用: {skill} (累计 {count} 次)")
+    mode_label = "🤖 主动" if mode == "active" else "👤 被动"
+    print(f"✅ 记录使用: {skill} ({mode_label}, 累计 {count} 次)")
 
 
 def cmd_error(args):
@@ -168,12 +186,17 @@ def cmd_stats(args):
     if not rows:
         print("暂无使用记录。首次使用 dashboard 或执行 tracker.py log <skill> 来记录。")
     else:
-        print(f"{'Skill':<25} {'次数':<6} {'首次':<20} {'最近':<20}")
-        print("-" * 71)
+        print(f"{'Skill':<25} {'次数':<6} {'主动':<6} {'被动':<6} {'首次':<20} {'最近':<20}")
+        print("-" * 89)
         for r in rows:
             first = time.strftime("%Y-%m-%d %H:%M", time.localtime(r["first_seen"]))
             last = time.strftime("%Y-%m-%d %H:%M", time.localtime(r["last_seen"]))
-            print(f"{r['skill_name']:<25} {r['cnt']:<6} {first:<20} {last:<20}")
+            # 查主动/被动数量
+            active = conn.execute(
+                "SELECT COUNT(*) FROM usage_log WHERE skill_name = ? AND mode = 'active'", (r['skill_name'],)
+            ).fetchone()[0]
+            passive = r["cnt"] - active
+            print(f"{r['skill_name']:<25} {r['cnt']:<6} {active:<6} {passive:<6} {first:<20} {last:<20}")
 
     # 错误统计
     err_rows = conn.execute(f"""
